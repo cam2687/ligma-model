@@ -408,6 +408,14 @@ def render_game_card(game: dict) -> None:
                 f"SP: {a_br} — {game.get('away_pitcher','TBD')} | "
                 f"{h_br} — {game.get('home_pitcher','TBD')}"
             )
+        if game.get("home_availability_impact", 0) or game.get("away_availability_impact", 0):
+            home_note = game.get("home_injury_notes", "") or (
+                f"inj {game.get('home_injury_impact', 0):.2f}, susp {game.get('home_suspension_impact', 0):.2f}"
+            )
+            away_note = game.get("away_injury_notes", "") or (
+                f"inj {game.get('away_injury_impact', 0):.2f}, susp {game.get('away_suspension_impact', 0):.2f}"
+            )
+            captions.append(f"Availability: {h_br} - {home_note} | {a_br} - {away_note}")
         if venue:
             captions.append(f"Venue: {venue}")
         for cap in captions:

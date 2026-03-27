@@ -118,6 +118,142 @@ def _soccer_probs(classifier, X: pd.DataFrame) -> tuple[float, float, float]:
     return home, draw, away
 
 
+def _load_injury_report() -> dict[str, dict]:
+    """
+    Load optional per-team availability adjustments from cache/<sport>_injuries.csv.
+
+    Expected columns:
+      team_br, injury_impact, suspension_impact, key_absences, suspended_count, notes
+
+    injury_impact / suspension_impact are recommended on a 0.0-1.0 scale where:
+      0.0 = fully healthy
+      0.3 = noticeable absences
+      0.6 = multiple important absences
+      1.0 = severe injury situation
+    """
+    path = CACHE_DIR / f"{SPORT}_injuries.csv"
+    if not path.exists():
+        return {}
+
+    try:
+        df = pd.read_csv(path)
+    except Exception:
+        return {}
+
+    if "team_br" not in df.columns:
+        if "team" in df.columns:
+            df = df.rename(columns={"team": "team_br"})
+        else:
+            return {}
+
+    df["team_br"] = df["team_br"].astype(str).str.strip()
+    df = df[df["team_br"] != ""].copy()
+
+    if "injury_impact" not in df.columns:
+        df["injury_impact"] = 0.0
+    if "suspension_impact" not in df.columns:
+        df["suspension_impact"] = 0.0
+    if "key_absences" not in df.columns:
+        df["key_absences"] = 0
+    if "suspended_count" not in df.columns:
+        df["suspended_count"] = 0
+    if "notes" not in df.columns:
+        df["notes"] = ""
+
+    df["injury_impact"] = pd.to_numeric(df["injury_impact"], errors="coerce").fillna(0.0)
+    df["suspension_impact"] = pd.to_numeric(df["suspension_impact"], errors="coerce").fillna(0.0)
+    df["key_absences"] = pd.to_numeric(df["key_absences"], errors="coerce").fillna(0).astype(int)
+    df["suspended_count"] = pd.to_numeric(df["suspended_count"], errors="coerce").fillna(0).astype(int)
+    df["availability_impact"] = (
+        df["injury_impact"]
+        + df["suspension_impact"]
+        + (df["key_absences"].clip(lower=0) * 0.08)
+        + (df["suspended_count"].clip(lower=0) * 0.12)
+    ).clip(0.0, 1.0)
+
+    return df.set_index("team_br")[
+        [
+            "injury_impact",
+            "suspension_impact",
+            "availability_impact",
+            "key_absences",
+            "suspended_count",
+            "notes",
+        ]
+    ].to_dict("index")
+
+
+def _apply_injury_adjustments(pred: dict, home_injury: dict, away_injury: dict) -> dict:
+    """Apply lightweight availability adjustments from injuries and suspensions."""
+    pred = pred.copy()
+    home_injury_impact = float(home_injury.get("injury_impact", 0.0) or 0.0)
+    away_injury_impact = float(away_injury.get("injury_impact", 0.0) or 0.0)
+    home_suspension_impact = float(home_injury.get("suspension_impact", 0.0) or 0.0)
+    away_suspension_impact = float(away_injury.get("suspension_impact", 0.0) or 0.0)
+    home_impact = float(home_injury.get("availability_impact", home_injury_impact + home_suspension_impact) or 0.0)
+    away_impact = float(away_injury.get("availability_impact", away_injury_impact + away_suspension_impact) or 0.0)
+
+    pred["home_injury_impact"] = round(home_injury_impact, 3)
+    pred["away_injury_impact"] = round(away_injury_impact, 3)
+    pred["home_suspension_impact"] = round(home_suspension_impact, 3)
+    pred["away_suspension_impact"] = round(away_suspension_impact, 3)
+    pred["home_availability_impact"] = round(home_impact, 3)
+    pred["away_availability_impact"] = round(away_impact, 3)
+    pred["home_injury_notes"] = str(home_injury.get("notes", "") or "").strip()
+    pred["away_injury_notes"] = str(away_injury.get("notes", "") or "").strip()
+    pred["home_key_absences"] = int(home_injury.get("key_absences", 0) or 0)
+    pred["away_key_absences"] = int(away_injury.get("key_absences", 0) or 0)
+    pred["home_suspended_count"] = int(home_injury.get("suspended_count", 0) or 0)
+    pred["away_suspended_count"] = int(away_injury.get("suspended_count", 0) or 0)
+
+    if SPORT == "soccer":
+        raw_home = pred["home_win_prob"] * (1 - 0.18 * home_impact) * (1 + 0.12 * away_impact)
+        raw_away = pred["away_win_prob"] * (1 - 0.18 * away_impact) * (1 + 0.12 * home_impact)
+        raw_draw = pred["draw_prob"] * (1 + 0.05 * (home_impact + away_impact))
+        denom = max(raw_home + raw_draw + raw_away, 1e-9)
+
+        pred["home_win_prob"] = round(raw_home / denom, 3)
+        pred["draw_prob"] = round(raw_draw / denom, 3)
+        pred["away_win_prob"] = round(raw_away / denom, 3)
+
+        pred["pred_home_goals"] = round(max(0.0, pred["pred_home_goals"] - 0.35 * home_impact), 1)
+        pred["pred_away_goals"] = round(max(0.0, pred["pred_away_goals"] - 0.35 * away_impact), 1)
+        pred["predicted_total"] = round(pred["pred_home_goals"] + pred["pred_away_goals"], 1)
+
+        pred["home_moneyline"] = prob_to_moneyline(pred["home_win_prob"])
+        pred["draw_moneyline"] = prob_to_moneyline(pred["draw_prob"])
+        pred["away_moneyline"] = prob_to_moneyline(pred["away_win_prob"])
+        pred["home_moneyline_str"] = format_moneyline(pred["home_moneyline"])
+        pred["draw_moneyline_str"] = format_moneyline(pred["draw_moneyline"])
+        pred["away_moneyline_str"] = format_moneyline(pred["away_moneyline"])
+
+        probs = {
+            "home": pred["home_win_prob"],
+            "draw": pred["draw_prob"],
+            "away": pred["away_win_prob"],
+        }
+        pred["predicted_winner"] = max(probs, key=probs.get)
+        pred["confidence"], pred["confidence_pct"] = _confidence_from_probs(list(probs.values()))
+        return pred
+
+    raw_home = pred["home_win_prob"] * (1 - 0.20 * home_impact) * (1 + 0.15 * away_impact)
+    raw_away = pred["away_win_prob"] * (1 - 0.20 * away_impact) * (1 + 0.15 * home_impact)
+    denom = max(raw_home + raw_away, 1e-9)
+
+    pred["home_win_prob"] = round(raw_home / denom, 3)
+    pred["away_win_prob"] = round(raw_away / denom, 3)
+    pred["pred_home_runs"] = round(max(0.0, pred["pred_home_runs"] - 0.5 * home_impact), 1)
+    pred["pred_away_runs"] = round(max(0.0, pred["pred_away_runs"] - 0.5 * away_impact), 1)
+    pred["predicted_total"] = round(pred["pred_home_runs"] + pred["pred_away_runs"], 1)
+    pred["home_moneyline"] = prob_to_moneyline(pred["home_win_prob"])
+    pred["away_moneyline"] = prob_to_moneyline(pred["away_win_prob"])
+    pred["home_moneyline_str"] = format_moneyline(pred["home_moneyline"])
+    pred["away_moneyline_str"] = format_moneyline(pred["away_moneyline"])
+    pred["predicted_winner"] = "home" if pred["home_win_prob"] >= pred["away_win_prob"] else "away"
+    pred["confidence"], pred["confidence_pct"] = _confidence_from_probs([pred["home_win_prob"], pred["away_win_prob"]])
+    return pred
+
+
 # ---------------------------------------------------------------------------
 # Single-game prediction
 # ---------------------------------------------------------------------------
@@ -231,6 +367,7 @@ def predict_today(
     else:
         rolling_lookup = end_rolling.set_index("team_br").to_dict("index")
 
+    injury_lookup = _load_injury_report()
     results = []
 
     if SPORT == "mlb":
@@ -309,6 +446,11 @@ def predict_today(
             )
 
             pred = predict_game(features, classifier, home_regressor, away_regressor)
+            pred = _apply_injury_adjustments(
+                pred,
+                injury_lookup.get(h, {}),
+                injury_lookup.get(a, {}),
+            )
             pred.update({
                 "home_team_br":     h,
                 "away_team_br":     a,
@@ -371,6 +513,11 @@ def predict_today(
             )
 
             pred = predict_game(features, classifier, home_regressor, away_regressor)
+            pred = _apply_injury_adjustments(
+                pred,
+                injury_lookup.get(h, {}),
+                injury_lookup.get(a, {}),
+            )
             pred.update({
                 "home_team_br":     h,
                 "away_team_br":     a,
