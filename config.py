@@ -1,11 +1,12 @@
 """Central configuration for the MLB AI prediction system."""
+import os
 import re
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Sport configuration
 # ---------------------------------------------------------------------------
-SPORT = "mlb"
+SPORT = os.getenv("SPORT_OVERRIDE", "mlb").strip().lower()
 BASE_DIR = Path(__file__).parent
 CACHE_DIR = BASE_DIR / "cache"
 MODELS_DIR = BASE_DIR / "models_saved"

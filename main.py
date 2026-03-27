@@ -71,7 +71,7 @@ def cmd_engineer(args) -> None:
     from src.data.features import build_training_dataset
 
     seasons = _parse_seasons(args)
-    features_path = CACHE_DIR / "features.parquet"
+    features_path = CACHE_DIR / f"{SPORT}_features.parquet"
 
     if features_path.exists() and not args.force:
         print(f"[engineer] Features already built at {features_path}. Use --force to rebuild.")
@@ -120,7 +120,7 @@ def cmd_train(args) -> None:
     from src.data.features import build_training_dataset
     from src.data.fetch import fetch_all_game_logs, fetch_all_fangraphs
 
-    features_path = CACHE_DIR / "features.parquet"
+    features_path = CACHE_DIR / f"{SPORT}_features.parquet"
 
     if features_path.exists() and not args.force:
         print(f"[train] Loading features from {features_path}")
@@ -156,7 +156,7 @@ def cmd_train(args) -> None:
         from src.models.train import get_feature_importance
         imp = get_feature_importance(clf)
         if not imp.empty:
-            imp.to_csv(MODELS_DIR / "feature_importance.csv", index=False)
+            imp.to_csv(MODELS_DIR / f"{SPORT}_feature_importance.csv", index=False)
             print("[train] Feature importance saved.")
     except Exception as e:
         print(f"[train] Could not save feature importance: {e}")

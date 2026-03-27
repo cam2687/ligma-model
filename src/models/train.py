@@ -31,6 +31,9 @@ from config import (
     TOP_FEATURES,
 )
 
+def _artifact_path(name: str, suffix: str) -> Path:
+    return MODELS_DIR / f"{SPORT}_{name}{suffix}"
+
 
 _CV_FOLDS = [
     (list(range(2019, 2020)), [2020]),
@@ -306,11 +309,11 @@ def get_feature_importance(classifier: CalibratedClassifierCV) -> pd.DataFrame:
 def save_models(classifier, home_regressor, away_regressor, cv_win: dict, cv_home: dict, cv_away: dict) -> None:
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-    joblib.dump(classifier, MODELS_DIR / "win_classifier.joblib")
+    joblib.dump(classifier, _artifact_path("win_classifier", ".joblib"))
 
     if SPORT == "mlb":
-        joblib.dump(home_regressor, MODELS_DIR / "home_runs_regressor.joblib")
-        joblib.dump(away_regressor, MODELS_DIR / "away_runs_regressor.joblib")
+        joblib.dump(home_regressor, _artifact_path("home_runs_regressor", ".joblib"))
+        joblib.dump(away_regressor, _artifact_path("away_runs_regressor", ".joblib"))
         all_metrics = {
             "win_classifier": cv_win,
             "home_runs_regressor": cv_home,
@@ -318,8 +321,8 @@ def save_models(classifier, home_regressor, away_regressor, cv_win: dict, cv_hom
             "feature_columns": FEATURE_COLUMNS,
         }
     elif SPORT == "soccer":
-        joblib.dump(home_regressor, MODELS_DIR / "home_goals_regressor.joblib")
-        joblib.dump(away_regressor, MODELS_DIR / "away_goals_regressor.joblib")
+        joblib.dump(home_regressor, _artifact_path("home_goals_regressor", ".joblib"))
+        joblib.dump(away_regressor, _artifact_path("away_goals_regressor", ".joblib"))
         all_metrics = {
             "win_classifier": cv_win,
             "home_goals_regressor": cv_home,
@@ -329,25 +332,25 @@ def save_models(classifier, home_regressor, away_regressor, cv_win: dict, cv_hom
     else:
         raise ValueError(f"Unsupported sport: {SPORT}")
 
-    with open(MODELS_DIR / "cv_metrics.json", "w") as f:
+    with open(_artifact_path("cv_metrics", ".json"), "w") as f:
         json.dump(all_metrics, f, indent=2)
 
     print(f"  [train] Models saved to {MODELS_DIR}")
 
 
 def load_models() -> tuple:
-    clf_path = MODELS_DIR / "win_classifier.joblib"
+    clf_path = _artifact_path("win_classifier", ".joblib")
 
     if SPORT == "mlb":
-        home_reg_path = MODELS_DIR / "home_runs_regressor.joblib"
-        away_reg_path = MODELS_DIR / "away_runs_regressor.joblib"
+        home_reg_path = _artifact_path("home_runs_regressor", ".joblib")
+        away_reg_path = _artifact_path("away_runs_regressor", ".joblib")
     elif SPORT == "soccer":
-        home_reg_path = MODELS_DIR / "home_goals_regressor.joblib"
-        away_reg_path = MODELS_DIR / "away_goals_regressor.joblib"
+        home_reg_path = _artifact_path("home_goals_regressor", ".joblib")
+        away_reg_path = _artifact_path("away_goals_regressor", ".joblib")
     else:
         raise ValueError(f"Unsupported sport: {SPORT}")
 
-    met_path = MODELS_DIR / "cv_metrics.json"
+    met_path = _artifact_path("cv_metrics", ".json")
 
     if not clf_path.exists():
         raise FileNotFoundError(

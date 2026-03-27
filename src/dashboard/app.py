@@ -9,6 +9,7 @@ Or via:
 """
 import sys
 import json
+import os
 import subprocess
 from pathlib import Path
 from datetime import date, datetime, timezone, timedelta
@@ -20,7 +21,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
-from config import MODELS_DIR, CACHE_DIR, BR_TO_FULL_NAME, SPORT as CONFIGURED_SPORT
+from config import MODELS_DIR, CACHE_DIR, BR_TO_FULL_NAME
 
 
 # ---------------------------------------------------------------------------
@@ -82,28 +83,31 @@ def load_predictions(sport: str) -> list[dict]:
     return []
 
 
-def refresh_prediction_file() -> tuple[bool, str]:
-    """Regenerate the configured sport's prediction file via the CLI."""
+def refresh_prediction_file(sport: str) -> tuple[bool, str]:
+    """Regenerate one sport's prediction file via the CLI."""
     try:
         project_root = Path(__file__).parents[2]
+        env = dict(os.environ)
+        env["SPORT_OVERRIDE"] = sport
         result = subprocess.run(
             [sys.executable, "main.py", "predict"],
             cwd=project_root,
             capture_output=True,
             text=True,
             check=False,
+            env=env,
         )
         if result.returncode != 0:
             stderr = (result.stderr or "").strip().splitlines()
             return False, stderr[-1] if stderr else "Prediction refresh failed."
-        return True, f"Predictions refreshed for configured backend sport: {CONFIGURED_SPORT}."
+        return True, f"Predictions refreshed for {sport}."
     except Exception as exc:
         return False, str(exc)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_cv_metrics() -> dict:
-    metrics_path = MODELS_DIR / "cv_metrics.json"
+def load_cv_metrics(sport: str) -> dict:
+    metrics_path = MODELS_DIR / f"{sport}_cv_metrics.json"
     if metrics_path.exists():
         with open(metrics_path) as f:
             return json.load(f)
@@ -111,8 +115,8 @@ def load_cv_metrics() -> dict:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_feature_importance() -> pd.DataFrame:
-    imp_path = MODELS_DIR / "feature_importance.csv"
+def load_feature_importance(sport: str) -> pd.DataFrame:
+    imp_path = MODELS_DIR / f"{sport}_feature_importance.csv"
     if imp_path.exists():
         return pd.read_csv(imp_path)
     return pd.DataFrame()
@@ -314,8 +318,8 @@ def render_game_card(game: dict) -> None:
 # Sidebar
 # ---------------------------------------------------------------------------
 
-def render_sidebar(cv_metrics: dict) -> str:
-    """Render sidebar and return the selected sport ('mlb' or 'soccer')."""
+def render_sidebar() -> tuple[str, dict]:
+    """Render sidebar and return the selected sport and its metrics."""
     with st.sidebar:
         st.title("AI Sports Predictions")
         st.caption(f"Today: {date.today().strftime('%B %d, %Y')}")
@@ -328,11 +332,12 @@ def render_sidebar(cv_metrics: dict) -> str:
             format_func=lambda s: "⚾ MLB Baseball" if s == "mlb" else "⚽ Soccer",
             horizontal=True,
         )
+        cv_metrics = load_cv_metrics(sport)
 
         st.divider()
 
         if st.button("🔄 Refresh Predictions", use_container_width=True):
-            ok, msg = refresh_prediction_file()
+            ok, msg = refresh_prediction_file(sport)
             st.cache_data.clear()
             if ok:
                 st.success(msg)
@@ -375,7 +380,7 @@ def render_sidebar(cv_metrics: dict) -> str:
         - Rolling form based on last 15 games
         """)
 
-    return sport
+    return sport, cv_metrics
 
 
 # ---------------------------------------------------------------------------
@@ -383,7 +388,7 @@ def render_sidebar(cv_metrics: dict) -> str:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    sport = render_sidebar(load_cv_metrics())
+    sport, cv_metrics = render_sidebar()
 
     if sport == "soccer":
         st.title("⚽ Soccer Game Predictions")
@@ -393,18 +398,7 @@ def main() -> None:
         st.caption(f"Powered by XGBoost | Data: pybaseball + MLB Stats API | {date.today()}")
 
     predictions = load_predictions(sport)
-    feat_imp    = load_feature_importance()
-
-    if sport != CONFIGURED_SPORT:
-        st.warning(
-            f"The dashboard is showing `{sport}` but the backend is currently configured for "
-            f"`{CONFIGURED_SPORT}` in config.py. The refresh button only regenerates "
-            f"`{CONFIGURED_SPORT}` predictions."
-        )
-        st.info(
-            f"To get fresh {sport} predictions, set `SPORT = \"{sport}\"` in `config.py` and run "
-            f"`python main.py predict`."
-        )
+    feat_imp = load_feature_importance(sport)
 
     # ---- Games tab ----
     tab_games, tab_model, tab_importance = st.tabs([
@@ -414,7 +408,7 @@ def main() -> None:
     with tab_games:
         if not predictions:
             if sport == "mlb":
-                st.info("No MLB predictions yet. Set `SPORT = 'mlb'` in config.py then run:")
+                st.info("No MLB predictions yet. Run:")
                 st.code("python main.py predict")
             else:
                 st.info("No soccer predictions yet. Run:")
@@ -425,7 +419,7 @@ def main() -> None:
                 render_game_card(game)
 
     with tab_model:
-        cv = load_cv_metrics()
+        cv = cv_metrics
         if not cv:
             st.info("No model metrics available. Train the model first.")
         else:
