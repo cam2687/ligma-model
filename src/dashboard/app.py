@@ -31,8 +31,8 @@ from config import MODELS_DIR, CACHE_DIR, BR_TO_FULL_NAME
 st.set_page_config(
     page_title="MLB AI Predictions",
     page_icon="⚾",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
 # ---------------------------------------------------------------------------
@@ -41,10 +41,11 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+/* ── Mobile-first base styles ── */
 .game-card {
     border: 1px solid #e0e0e0;
     border-radius: 10px;
-    padding: 16px;
+    padding: 14px 12px;
     margin-bottom: 16px;
     background: #fafafa;
 }
@@ -52,9 +53,70 @@ st.markdown("""
 .loser-dim        { color: #aaaaaa; }
 .moneyline-fav    { color: #e74c3c; font-weight: bold; }
 .moneyline-dog    { color: #27ae60; font-weight: bold; }
-.confidence-high  { background: #2ecc71; color: white; border-radius: 4px; padding: 2px 8px; }
-.confidence-mod   { background: #f39c12; color: white; border-radius: 4px; padding: 2px 8px; }
-.confidence-low   { background: #95a5a6; color: white; border-radius: 4px; padding: 2px 8px; }
+.confidence-high  { background: #2ecc71; color: white; border-radius: 4px; padding: 3px 10px; font-size: 0.85rem; }
+.confidence-mod   { background: #f39c12; color: white; border-radius: 4px; padding: 3px 10px; font-size: 0.85rem; }
+.confidence-low   { background: #95a5a6; color: white; border-radius: 4px; padding: 3px 10px; font-size: 0.85rem; }
+
+/* Matchup header: big team names */
+.matchup-header {
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.5;
+    margin-bottom: 4px;
+}
+
+/* Meta row: badge + time inline */
+.game-meta {
+    font-size: 0.82rem;
+    color: #555;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Stat label */
+.stat-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #888;
+    margin-bottom: 2px;
+}
+
+/* Score block */
+.score-block {
+    font-size: 1rem;
+    line-height: 1.7;
+}
+
+/* Moneyline block */
+.ml-block {
+    font-size: 1rem;
+    line-height: 1.7;
+}
+
+/* Form block */
+.form-block {
+    font-size: 0.88rem;
+    line-height: 1.7;
+}
+
+/* Make Streamlit columns stack on very small screens */
+@media (max-width: 480px) {
+    .matchup-header { font-size: 0.95rem; }
+    .score-block, .ml-block { font-size: 0.92rem; }
+    [data-testid="column"] { min-width: 100% !important; }
+}
+
+/* Remove excess padding from the main block */
+.block-container {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    max-width: 800px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -199,10 +261,10 @@ def win_prob_bar(home_team: str, away_team: str,
         ))
     fig.update_layout(
         xaxis=dict(range=[0, 115], showticklabels=False, showgrid=False),
-        yaxis=dict(autorange="reversed"),
+        yaxis=dict(autorange="reversed", tickfont=dict(size=13)),
         showlegend=False,
-        height=120,
-        margin=dict(l=10, r=10, t=5, b=5),
+        height=100,
+        margin=dict(l=0, r=40, t=4, b=4),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
     )
@@ -245,7 +307,7 @@ def _utc_to_et(dt_str: str) -> str:
 
 
 def render_game_card(game: dict) -> None:
-    """Render a single game prediction card."""
+    """Render a single game prediction card (mobile-first layout)."""
     h = game["home_team_name"]
     a = game["away_team_name"]
     h_br = game.get("home_team_br", "")
@@ -266,82 +328,90 @@ def render_game_card(game: dict) -> None:
 
     venue = game.get("venue", "")
     dt    = _utc_to_et(game.get("game_datetime", ""))
+    conf_badge = render_confidence_badge(game["confidence"])
 
     with st.container():
-        # Header row
-        col_teams, col_meta = st.columns([3, 1])
-        with col_teams:
-            st.markdown(
-                f"**<span class='{a_class}'>{a} ({a_br})</span>** "
-                f"@ **<span class='{h_class}'>{h} ({h_br})</span>**",
-                unsafe_allow_html=True,
-            )
-        with col_meta:
-            conf_badge = render_confidence_badge(game["confidence"])
-            st.markdown(f"{conf_badge} &nbsp; {dt}", unsafe_allow_html=True)
+        # ── Row 1: Matchup + meta (badge + time) ──
+        st.markdown(
+            f"<div class='matchup-header'>"
+            f"<span class='{a_class}'>{a} ({a_br})</span>"
+            f" <span style='color:#bbb'>@</span> "
+            f"<span class='{h_class}'>{h} ({h_br})</span>"
+            f"</div>"
+            f"<div class='game-meta'>{conf_badge} &nbsp; {dt}</div>",
+            unsafe_allow_html=True,
+        )
 
-        # Main prediction columns
-        col_bar, col_score, col_ml, col_form = st.columns([3, 2, 2, 3])
+        # ── Row 2: Win probability bar (full width) ──
+        st.markdown("<div class='stat-label'>Win Probability</div>", unsafe_allow_html=True)
+        fig = win_prob_bar(
+            f"{h_br} (Home)", f"{a_br} (Away)",
+            game["home_win_prob"], game["away_win_prob"], winner,
+            draw_prob=game.get("draw_prob"),
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-        with col_bar:
-            st.markdown("**Win Probability**")
-            fig = win_prob_bar(
-                f"{h_br} (Home)", f"{a_br} (Away)",
-                game["home_win_prob"], game["away_win_prob"], winner,
-                draw_prob=game.get("draw_prob"),
-            )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        # ── Row 3: Score | Moneyline (2 equal columns) ──
+        col_score, col_ml = st.columns(2)
 
         with col_score:
-            st.markdown("**Predicted Score**")
             if "pred_home_goals" in game:
-                pred_home = game.get('pred_home_goals', 0)
-                pred_away = game.get('pred_away_goals', 0)
+                pred_home = game.get("pred_home_goals", 0)
+                pred_away = game.get("pred_away_goals", 0)
                 unit = "goals"
             elif "pred_home_runs" in game:
-                pred_home = game.get('pred_home_runs', 0)
-                pred_away = game.get('pred_away_runs', 0)
+                pred_home = game.get("pred_home_runs", 0)
+                pred_away = game.get("pred_away_runs", 0)
                 unit = "runs"
             else:
-                pred_home = 0
-                pred_away = 0
-                unit = "pts"
+                pred_home, pred_away, unit = 0, 0, "pts"
 
             st.markdown(
-                f"<span class='{h_class}'>{h_br} **{pred_home}**</span><br>"
-                f"<span class='{a_class}'>{a_br} **{pred_away}**</span><br>"
-                f"<small>Total: {game['predicted_total']} {unit}</small>",
+                f"<div class='stat-label'>Predicted Score</div>"
+                f"<div class='score-block'>"
+                f"<span class='{h_class}'>{h_br} <b>{pred_home}</b></span><br>"
+                f"<span class='{a_class}'>{a_br} <b>{pred_away}</b></span><br>"
+                f"<small style='color:#888'>Total: {game['predicted_total']} {unit}</small>"
+                f"</div>",
                 unsafe_allow_html=True,
             )
 
         with col_ml:
-            st.markdown("**Fair Moneyline**")
-            lines = [
-                f"{h_br}: <span class='{h_ml_class}'>{h_ml}</span>",
-            ]
+            lines = [f"<span class='{h_ml_class}'>{h_br}: {h_ml}</span>"]
             if "draw_moneyline_str" in game:
-                lines.append(f"Draw: <span class='moneyline-dog'>{game['draw_moneyline_str']}</span>")
-            lines.append(f"{a_br}: <span class='{a_ml_class}'>{a_ml}</span>")
-            lines.append("<small style='color:#888'>Model implied (no vig)</small>")
-            st.markdown("<br>".join(lines), unsafe_allow_html=True)
-
-        with col_form:
-            st.markdown("**Recent Form (last 10)**")
-            h_form = render_form_string(game.get("recent_form_home", "N/A"))
-            a_form = render_form_string(game.get("recent_form_away", "N/A"))
+                lines.append(f"<span class='moneyline-dog'>Draw: {game['draw_moneyline_str']}</span>")
+            lines.append(f"<span class='{a_ml_class}'>{a_br}: {a_ml}</span>")
             st.markdown(
-                f"{h_br}: {h_form}<br>{a_br}: {a_form}",
+                f"<div class='stat-label'>Fair Moneyline</div>"
+                f"<div class='ml-block'>"
+                + "<br>".join(lines) +
+                f"<br><small style='color:#888'>no-vig implied</small>"
+                f"</div>",
                 unsafe_allow_html=True,
             )
 
-        # Starting pitchers
+        # ── Row 4: Recent form ──
+        h_form = render_form_string(game.get("recent_form_home", "N/A"))
+        a_form = render_form_string(game.get("recent_form_away", "N/A"))
+        st.markdown(
+            f"<div class='stat-label' style='margin-top:6px'>Recent Form (last 10)</div>"
+            f"<div class='form-block'>"
+            f"{h_br}: {h_form}<br>{a_br}: {a_form}"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        # ── Footer captions ──
+        captions = []
         if game.get("home_pitcher") or game.get("away_pitcher"):
-            st.caption(
+            captions.append(
                 f"SP: {a_br} — {game.get('away_pitcher','TBD')} | "
                 f"{h_br} — {game.get('home_pitcher','TBD')}"
             )
         if venue:
-            st.caption(f"Venue: {venue}")
+            captions.append(f"Venue: {venue}")
+        for cap in captions:
+            st.caption(cap)
 
         st.divider()
 
@@ -488,13 +558,10 @@ def main() -> None:
                 reg_title_home = "Home Regressor (Temporal CV)"
                 reg_title_away = "Away Regressor (Temporal CV)"
 
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.subheader("Win Classifier (Temporal CV)")
+            with st.expander("Win Classifier (Temporal CV)", expanded=True):
                 if wc.get("folds"):
                     fold_df = pd.DataFrame(wc["folds"])
                     st.dataframe(fold_df.round(4), use_container_width=True)
-                    # Accuracy by fold chart
                     fig = px.bar(fold_df, x="fold", y="accuracy",
                                  title="Accuracy by CV Fold",
                                  color="accuracy",
@@ -503,9 +570,10 @@ def main() -> None:
                     fig.add_hline(y=0.54, line_dash="dash",
                                   annotation_text="Home-team baseline (~54%)")
                     st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No fold data available.")
 
-            with col2:
-                st.subheader(reg_title_home)
+            with st.expander(reg_title_home, expanded=False):
                 if hr.get("folds"):
                     fold_df = pd.DataFrame(hr["folds"])
                     st.dataframe(fold_df.round(4), use_container_width=True)
@@ -514,9 +582,10 @@ def main() -> None:
                                  color="rmse",
                                  color_continuous_scale="RdYlGn_r")
                     st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No fold data available.")
 
-            with col3:
-                st.subheader(reg_title_away)
+            with st.expander(reg_title_away, expanded=False):
                 if ar.get("folds"):
                     fold_df = pd.DataFrame(ar["folds"])
                     st.dataframe(fold_df.round(4), use_container_width=True)
@@ -525,6 +594,8 @@ def main() -> None:
                                  color="rmse",
                                  color_continuous_scale="RdYlGn_r")
                     st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No fold data available.")
 
     with tab_importance:
         if feat_imp.empty:
