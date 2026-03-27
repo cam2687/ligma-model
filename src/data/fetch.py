@@ -283,7 +283,17 @@ def fetch_all_game_logs(seasons: list[int] = TRAIN_SEASONS,
     if not force:
         cached = _load(key)
         if cached is not None:
-            return cached
+            if SPORT == "soccer" and "league" not in cached.columns:
+                print("  [fetch] Rebuilding legacy soccer team-row cache to include league context...")
+            else:
+                return cached
+
+    if SPORT == "soccer" and not force:
+        rebuilt = _rebuild_cached_soccer_team_rows(seasons)
+        if rebuilt is not None and not rebuilt.empty:
+            _save(key, rebuilt)
+            print(f"  [fetch] Total: {len(rebuilt):,} team-game rows (rebuilt from season caches)")
+            return rebuilt
 
     season_dfs = []
     for season in seasons:
@@ -308,6 +318,28 @@ def fetch_all_game_logs(seasons: list[int] = TRAIN_SEASONS,
     _save(key, team_rows)
     print(f"  [fetch] Total: {len(games)} games, {len(team_rows)} team-game rows")
     return team_rows
+
+
+def _rebuild_cached_soccer_team_rows(seasons: list[int]) -> Optional[pd.DataFrame]:
+    """Rebuild soccer team rows from cached per-season game files when old aggregate cache is stale."""
+    season_dfs = []
+    for season in seasons:
+        cached_season = _load(f"soccer_season_games_{season}")
+        if cached_season is not None and not cached_season.empty:
+            season_dfs.append(cached_season)
+
+    intl_key = f"international_games_{'_'.join(map(str, TRAIN_SEASONS))}"
+    intl_cached = _load(intl_key)
+    if intl_cached is not None and not intl_cached.empty:
+        intl_cached = intl_cached[intl_cached["season"].isin(seasons)].copy()
+        if not intl_cached.empty:
+            season_dfs.append(intl_cached)
+
+    if not season_dfs:
+        return None
+
+    games = pd.concat(season_dfs, ignore_index=True)
+    return _games_to_team_rows(games)
 
 
 def _fetch_international_game_logs(seasons: list[int], force: bool = False) -> pd.DataFrame:

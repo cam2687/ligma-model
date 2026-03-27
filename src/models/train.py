@@ -352,6 +352,30 @@ def load_models() -> tuple:
 
     met_path = _artifact_path("cv_metrics", ".json")
 
+    if SPORT == "mlb" and not clf_path.exists():
+        legacy_clf = MODELS_DIR / "win_classifier.joblib"
+        if legacy_clf.exists():
+            clf_path = legacy_clf
+
+    if SPORT == "mlb" and not home_reg_path.exists():
+        legacy_home = MODELS_DIR / (
+            "home_runs_regressor.joblib" if SPORT == "mlb" else "home_goals_regressor.joblib"
+        )
+        if legacy_home.exists():
+            home_reg_path = legacy_home
+
+    if SPORT == "mlb" and not away_reg_path.exists():
+        legacy_away = MODELS_DIR / (
+            "away_runs_regressor.joblib" if SPORT == "mlb" else "away_goals_regressor.joblib"
+        )
+        if legacy_away.exists():
+            away_reg_path = legacy_away
+
+    if SPORT == "mlb" and not met_path.exists():
+        legacy_metrics = MODELS_DIR / "cv_metrics.json"
+        if legacy_metrics.exists():
+            met_path = legacy_metrics
+
     if not clf_path.exists():
         raise FileNotFoundError(
             f"Model not found at {clf_path}. Run: python main.py train"

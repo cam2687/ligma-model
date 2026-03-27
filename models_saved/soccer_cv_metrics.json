@@ -1,0 +1,177 @@
+{
+  "win_classifier": {
+    "folds": [
+      {
+        "fold": 1,
+        "train_size": 6947,
+        "val_size": 6923,
+        "accuracy": 0.44749386104290045,
+        "log_loss": 1.085191611611665,
+        "brier": 0.6518762108392129,
+        "auc_roc": 0.5904562679460769,
+        "macro_f1": 0.3929223611894632
+      },
+      {
+        "fold": 2,
+        "train_size": 13870,
+        "val_size": 7651,
+        "accuracy": 0.4914390275780944,
+        "log_loss": 1.0266216899538252,
+        "brier": 0.6142437674372646,
+        "auc_roc": 0.6256460804077197,
+        "macro_f1": 0.40230140500011835
+      },
+      {
+        "fold": 3,
+        "train_size": 21521,
+        "val_size": 7467,
+        "accuracy": 0.49189768313914556,
+        "log_loss": 1.0208197796139973,
+        "brier": 0.6108353988706519,
+        "auc_roc": 0.6231450333251539,
+        "macro_f1": 0.39228714915973634
+      },
+      {
+        "fold": 4,
+        "train_size": 28988,
+        "val_size": 7521,
+        "accuracy": 0.4915569738066746,
+        "log_loss": 1.0178163158020272,
+        "brier": 0.6087102728797954,
+        "auc_roc": 0.6290316991392748,
+        "macro_f1": 0.38017053145024465
+      },
+      {
+        "fold": 5,
+        "train_size": 36509,
+        "val_size": 13672,
+        "accuracy": 0.4953920421299005,
+        "log_loss": 1.0181477913663786,
+        "brier": 0.6099084226740062,
+        "auc_roc": 0.6277084891712709,
+        "macro_f1": 0.38074304882992527
+      }
+    ],
+    "mean_accuracy": 0.4835559175393431,
+    "mean_log_loss": 1.0337194376695789,
+    "mean_brier": 0.6191148145401862,
+    "mean_auc_roc": 0.6191975139978992,
+    "mean_macro_f1": 0.38968489912589754
+  },
+  "home_goals_regressor": {
+    "folds": [
+      {
+        "fold": 1,
+        "train_size": 6947,
+        "val_size": 6923,
+        "rmse": 1.2423810028413218,
+        "mae": 0.98117995262146
+      },
+      {
+        "fold": 2,
+        "train_size": 13870,
+        "val_size": 7651,
+        "rmse": 1.277971492586692,
+        "mae": 0.9785115122795105
+      },
+      {
+        "fold": 3,
+        "train_size": 21521,
+        "val_size": 7467,
+        "rmse": 1.2356323405594307,
+        "mae": 0.963589608669281
+      },
+      {
+        "fold": 4,
+        "train_size": 28988,
+        "val_size": 7521,
+        "rmse": 1.275226062480446,
+        "mae": 0.9890397787094116
+      },
+      {
+        "fold": 5,
+        "train_size": 36509,
+        "val_size": 13672,
+        "rmse": 1.2420753092454904,
+        "mae": 0.9755131602287292
+      }
+    ],
+    "mean_rmse": 1.2546572415426762,
+    "mean_mae": 0.9775668025016785
+  },
+  "away_goals_regressor": {
+    "folds": [
+      {
+        "fold": 1,
+        "train_size": 6947,
+        "val_size": 6923,
+        "rmse": 1.1224569081316609,
+        "mae": 0.8753032684326172
+      },
+      {
+        "fold": 2,
+        "train_size": 13870,
+        "val_size": 7651,
+        "rmse": 1.130188421727354,
+        "mae": 0.8796640038490295
+      },
+      {
+        "fold": 3,
+        "train_size": 21521,
+        "val_size": 7467,
+        "rmse": 1.1030087007160396,
+        "mae": 0.8524698615074158
+      },
+      {
+        "fold": 4,
+        "train_size": 28988,
+        "val_size": 7521,
+        "rmse": 1.126700176233515,
+        "mae": 0.8810696005821228
+      },
+      {
+        "fold": 5,
+        "train_size": 36509,
+        "val_size": 13672,
+        "rmse": 1.1121376990679852,
+        "mae": 0.8625451326370239
+      }
+    ],
+    "mean_rmse": 1.118898381175311,
+    "mean_mae": 0.8702103734016419
+  },
+  "feature_columns": [
+    "home_roll_win_rate",
+    "away_roll_win_rate",
+    "home_roll_draw_rate",
+    "away_roll_draw_rate",
+    "home_roll_goals_scored",
+    "away_roll_goals_scored",
+    "home_roll_goals_allowed",
+    "away_roll_goals_allowed",
+    "home_roll_goal_diff",
+    "away_roll_goal_diff",
+    "home_roll_pythag",
+    "away_roll_pythag",
+    "home_season_win_pct",
+    "away_season_win_pct",
+    "home_attack_strength",
+    "away_attack_strength",
+    "home_defense_strength",
+    "away_defense_strength",
+    "roll_win_rate_diff",
+    "roll_draw_rate_diff",
+    "roll_goal_diff_diff",
+    "roll_pythag_diff",
+    "season_win_pct_diff",
+    "attack_diff",
+    "defense_diff",
+    "home_rest_days",
+    "away_rest_days",
+    "rest_days_diff",
+    "month",
+    "day_of_week",
+    "is_weekend",
+    "home_advantage"
+  ]
+}
