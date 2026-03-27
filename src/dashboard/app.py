@@ -17,7 +17,6 @@ from datetime import date, datetime, timezone, timedelta
 import pandas as pd
 import numpy as np
 import streamlit as st
-import plotly.graph_objects as go
 import plotly.express as px
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
@@ -41,14 +40,25 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-/* ── Mobile-first base styles ── */
-.game-card {
-    border: 1px solid #e0e0e0;
-    border-radius: 10px;
-    padding: 14px 12px;
-    margin-bottom: 16px;
-    background: #fafafa;
+/* ── Sidebar toggle: make it visible on mobile ── */
+[data-testid="collapsedControl"] {
+    top: 12px !important;
+    background: #2563eb !important;
+    border-radius: 0 8px 8px 0 !important;
+    width: 36px !important;
+    height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: 2px 2px 6px rgba(0,0,0,0.25) !important;
 }
+[data-testid="collapsedControl"] svg {
+    fill: white !important;
+    width: 22px !important;
+    height: 22px !important;
+}
+
+/* ── Mobile-first base styles ── */
 .winner-highlight { color: #2ecc71; font-weight: bold; }
 .loser-dim        { color: #aaaaaa; }
 .moneyline-fav    { color: #e74c3c; font-weight: bold; }
@@ -57,7 +67,7 @@ st.markdown("""
 .confidence-mod   { background: #f39c12; color: white; border-radius: 4px; padding: 3px 10px; font-size: 0.85rem; }
 .confidence-low   { background: #95a5a6; color: white; border-radius: 4px; padding: 3px 10px; font-size: 0.85rem; }
 
-/* Matchup header: big team names */
+/* Matchup header */
 .matchup-header {
     font-size: 1.05rem;
     font-weight: 600;
@@ -69,7 +79,7 @@ st.markdown("""
 .game-meta {
     font-size: 0.82rem;
     color: #555;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -78,37 +88,66 @@ st.markdown("""
 
 /* Stat label */
 .stat-label {
-    font-size: 0.75rem;
-    font-weight: 600;
+    font-size: 0.72rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
     color: #888;
-    margin-bottom: 2px;
+    margin-bottom: 6px;
 }
 
-/* Score block */
-.score-block {
-    font-size: 1rem;
-    line-height: 1.7;
+/* ── CSS win-probability bars (no Plotly, no zoom) ── */
+.prob-bars { margin-bottom: 12px; }
+.prob-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
 }
-
-/* Moneyline block */
-.ml-block {
-    font-size: 1rem;
-    line-height: 1.7;
+.prob-team-label {
+    flex: 0 0 72px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
-
-/* Form block */
-.form-block {
-    font-size: 0.88rem;
-    line-height: 1.7;
+.prob-track {
+    flex: 1;
+    background: #e9ecef;
+    border-radius: 6px;
+    height: 22px;
+    overflow: hidden;
+    position: relative;
 }
+.prob-fill {
+    height: 100%;
+    border-radius: 6px;
+    background: #95a5a6;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: white;
+    min-width: 40px;
+    transition: width 0.4s ease;
+    white-space: nowrap;
+}
+.prob-fill.winner { background: #2ecc71; }
+.prob-fill.draw-bar { background: #f39c12; }
 
-/* Make Streamlit columns stack on very small screens */
-@media (max-width: 480px) {
-    .matchup-header { font-size: 0.95rem; }
-    .score-block, .ml-block { font-size: 0.92rem; }
-    [data-testid="column"] { min-width: 100% !important; }
+/* Score / ML / Form blocks */
+.score-block { font-size: 0.95rem; line-height: 1.8; }
+.ml-block    { font-size: 0.95rem; line-height: 1.8; }
+.form-block  { font-size: 0.85rem; line-height: 1.7; margin-top: 2px; }
+
+/* Divider between cards */
+.card-divider {
+    border: none;
+    border-top: 1px solid #e0e0e0;
+    margin: 14px 0 20px 0;
 }
 
 /* Remove excess padding from the main block */
@@ -116,6 +155,13 @@ st.markdown("""
     padding-left: 1rem !important;
     padding-right: 1rem !important;
     max-width: 800px !important;
+}
+
+@media (max-width: 480px) {
+    .matchup-header { font-size: 0.92rem; }
+    .prob-team-label { flex: 0 0 56px; font-size: 0.76rem; }
+    .score-block, .ml-block { font-size: 0.88rem; }
+    [data-testid="column"] { min-width: 100% !important; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -220,55 +266,30 @@ def load_feature_importance(sport: str) -> pd.DataFrame:
 # Helper functions
 # ---------------------------------------------------------------------------
 
-def win_prob_bar(home_team: str, away_team: str,
-                 home_prob: float, away_prob: float,
-                 predicted_winner: str,
-                 draw_prob: float | None = None) -> go.Figure:
-    """Horizontal bar chart showing outcome probabilities."""
-    home_pct = home_prob * 100
-    away_pct = away_prob * 100
+def win_prob_bars_html(home_label: str, away_label: str,
+                       home_prob: float, away_prob: float,
+                       predicted_winner: str,
+                       draw_prob: float | None = None) -> str:
+    """
+    Pure CSS horizontal probability bars — no Plotly, no zoom, mobile-safe.
+    Returns an HTML string to be rendered with st.markdown(unsafe_allow_html=True).
+    """
+    def _row(label: str, pct: float, is_winner: bool, extra_cls: str = "") -> str:
+        fill_cls = "prob-fill winner" if is_winner else f"prob-fill {extra_cls}".strip()
+        return (
+            f"<div class='prob-row'>"
+            f"<div class='prob-team-label'>{label}</div>"
+            f"<div class='prob-track'>"
+            f"<div class='{fill_cls}' style='width:{pct:.1f}%'>{pct:.1f}%</div>"
+            f"</div>"
+            f"</div>"
+        )
 
-    home_color = "#2ecc71" if predicted_winner == "home" else "#95a5a6"
-    away_color = "#2ecc71" if predicted_winner == "away" else "#95a5a6"
-
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=[home_pct], y=[home_team],
-        orientation="h",
-        marker_color=home_color,
-        text=[f"{home_pct:.1f}%"],
-        textposition="outside",
-        name=home_team,
-    ))
-    fig.add_trace(go.Bar(
-        x=[away_pct], y=[away_team],
-        orientation="h",
-        marker_color=away_color,
-        text=[f"{away_pct:.1f}%"],
-        textposition="outside",
-        name=away_team,
-    ))
+    rows = _row(home_label, home_prob * 100, predicted_winner == "home")
     if draw_prob is not None:
-        draw_pct = draw_prob * 100
-        draw_color = "#2ecc71" if predicted_winner == "draw" else "#95a5a6"
-        fig.add_trace(go.Bar(
-            x=[draw_pct], y=["Draw"],
-            orientation="h",
-            marker_color=draw_color,
-            text=[f"{draw_pct:.1f}%"],
-            textposition="outside",
-            name="Draw",
-        ))
-    fig.update_layout(
-        xaxis=dict(range=[0, 115], showticklabels=False, showgrid=False),
-        yaxis=dict(autorange="reversed", tickfont=dict(size=13)),
-        showlegend=False,
-        height=100,
-        margin=dict(l=0, r=40, t=4, b=4),
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-    )
-    return fig
+        rows += _row("Draw", draw_prob * 100, predicted_winner == "draw", "draw-bar")
+    rows += _row(away_label, away_prob * 100, predicted_winner == "away")
+    return f"<div class='prob-bars'>{rows}</div>"
 
 
 def render_confidence_badge(confidence: str) -> str:
@@ -342,14 +363,16 @@ def render_game_card(game: dict) -> None:
             unsafe_allow_html=True,
         )
 
-        # ── Row 2: Win probability bar (full width) ──
-        st.markdown("<div class='stat-label'>Win Probability</div>", unsafe_allow_html=True)
-        fig = win_prob_bar(
-            f"{h_br} (Home)", f"{a_br} (Away)",
+        # ── Row 2: Win probability bars (CSS, no Plotly) ──
+        prob_html = win_prob_bars_html(
+            f"{h_br} Home", f"{a_br} Away",
             game["home_win_prob"], game["away_win_prob"], winner,
             draw_prob=game.get("draw_prob"),
         )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.markdown(
+            f"<div class='stat-label'>Win Probability</div>{prob_html}",
+            unsafe_allow_html=True,
+        )
 
         # ── Row 3: Score | Moneyline (2 equal columns) ──
         col_score, col_ml = st.columns(2)
@@ -396,7 +419,8 @@ def render_game_card(game: dict) -> None:
         st.markdown(
             f"<div class='stat-label' style='margin-top:6px'>Recent Form (last 10)</div>"
             f"<div class='form-block'>"
-            f"{h_br}: {h_form}<br>{a_br}: {a_form}"
+            f"<div><span style='color:#aeb6bf'>{h_br}:</span> {h_form or 'N/A'}</div>"
+            f"<div><span style='color:#aeb6bf'>{a_br}:</span> {a_form or 'N/A'}</div>"
             f"</div>",
             unsafe_allow_html=True,
         )
