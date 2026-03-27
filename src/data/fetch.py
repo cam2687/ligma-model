@@ -871,6 +871,23 @@ _ESPN_SOCCER_LEAGUES = [
 ]
 
 
+def _fixture_date_matches_target(value, target_date: str) -> bool:
+    """Return True when a fixture datetime belongs to the requested target date."""
+    raw = "" if value is None else str(value).strip()
+    if not raw:
+        return False
+
+    for fmt in ("%Y-%m-%d", "%Y%m%d", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S"):
+        try:
+            parsed = datetime.strptime(raw[:len(datetime.now().strftime(fmt))], fmt)
+            return parsed.strftime("%Y-%m-%d") == target_date
+        except ValueError:
+            continue
+
+    parsed = pd.to_datetime(raw, errors="coerce")
+    return pd.notna(parsed) and parsed.strftime("%Y-%m-%d") == target_date
+
+
 def fetch_soccer_fixtures(target_date: Optional[str] = None) -> list[dict]:
     """
     Load soccer fixtures for the target date.
@@ -893,12 +910,15 @@ def fetch_soccer_fixtures(target_date: Optional[str] = None) -> list[dict]:
                 away = str(row.get("away_team", "")).strip()
                 if not home or not away:
                     continue
+                game_datetime = str(row.get("game_datetime", game_date))
+                if not _fixture_date_matches_target(game_datetime, game_date):
+                    continue
                 games.append({
                     "home_team_br":   home,
                     "away_team_br":   away,
                     "home_team_name": home,
                     "away_team_name": away,
-                    "game_datetime":  str(row.get("game_datetime", game_date)),
+                    "game_datetime":  game_datetime,
                     "venue":          str(row.get("venue", "")),
                     "league":         str(row.get("league", "")),
                 })

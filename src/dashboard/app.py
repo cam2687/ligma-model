@@ -9,6 +9,7 @@ Or via:
 """
 import sys
 import json
+import subprocess
 from pathlib import Path
 from datetime import date
 
@@ -67,8 +68,37 @@ def load_predictions(sport: str) -> list[dict]:
     pred_path = CACHE_DIR / f"{sport}_predictions.json"
     if pred_path.exists():
         with open(pred_path) as f:
-            return json.load(f)
+            predictions = json.load(f)
+        today = date.today()
+        filtered = []
+        for game in predictions:
+            raw = str(game.get("game_datetime", "")).strip()
+            parsed = pd.to_datetime(raw, errors="coerce")
+            if pd.isna(parsed) and raw.isdigit() and len(raw) == 8:
+                parsed = pd.to_datetime(raw, format="%Y%m%d", errors="coerce")
+            if pd.isna(parsed) or parsed.date() >= today:
+                filtered.append(game)
+        return filtered
     return []
+
+
+def refresh_prediction_file() -> tuple[bool, str]:
+    """Regenerate the configured sport's prediction file via the CLI."""
+    try:
+        project_root = Path(__file__).parents[2]
+        result = subprocess.run(
+            [sys.executable, "main.py", "predict"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip().splitlines()
+            return False, stderr[-1] if stderr else "Prediction refresh failed."
+        return True, "Predictions refreshed."
+    except Exception as exc:
+        return False, str(exc)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -288,7 +318,12 @@ def render_sidebar(cv_metrics: dict) -> str:
         st.divider()
 
         if st.button("🔄 Refresh Predictions", use_container_width=True):
+            ok, msg = refresh_prediction_file()
             st.cache_data.clear()
+            if ok:
+                st.success(msg)
+            else:
+                st.warning(msg)
             st.rerun()
 
         st.divider()
