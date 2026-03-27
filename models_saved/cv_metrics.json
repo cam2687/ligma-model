@@ -3,163 +3,207 @@
     "folds": [
       {
         "fold": 1,
-        "train_size": 6947,
-        "val_size": 6923,
-        "accuracy": 0.6559295103278925,
-        "log_loss": 0.6278918301974541,
-        "brier": 0.21827968955039978,
-        "auc_roc": 0.7049515207706933
+        "train_size": 2388,
+        "val_size": 862,
+        "accuracy": 0.5812064965197216,
+        "log_loss": 0.7221745983559911,
+        "brier": 0.25761234760284424,
+        "auc_roc": 0.598547531619747
       },
       {
         "fold": 2,
-        "train_size": 13870,
-        "val_size": 7651,
-        "accuracy": 0.67612076852699,
-        "log_loss": 0.5920068783084192,
-        "brier": 0.20387503504753113,
-        "auc_roc": 0.7433495266359333
+        "train_size": 3250,
+        "val_size": 2366,
+        "accuracy": 0.5676246830092984,
+        "log_loss": 0.7314450115125274,
+        "brier": 0.262006938457489,
+        "auc_roc": 0.5741396592048112
       },
       {
         "fold": 3,
-        "train_size": 21521,
-        "val_size": 7523,
-        "accuracy": 0.6684833178253357,
-        "log_loss": 0.6015346305442748,
-        "brier": 0.2075323462486267,
-        "auc_roc": 0.7345931717338887
+        "train_size": 5616,
+        "val_size": 2353,
+        "accuracy": 0.583510412239694,
+        "log_loss": 0.6911330665805439,
+        "brier": 0.24667476117610931,
+        "auc_roc": 0.6128098705642563
       },
       {
         "fold": 4,
-        "train_size": 29044,
-        "val_size": 7577,
-        "accuracy": 0.6758611587699618,
-        "log_loss": 0.5945259909794547,
-        "brier": 0.2042822539806366,
-        "auc_roc": 0.7436682756060042
+        "train_size": 7969,
+        "val_size": 2392,
+        "accuracy": 0.5622909698996655,
+        "log_loss": 0.6946186617912422,
+        "brier": 0.24950283765792847,
+        "auc_roc": 0.5888672504378284
       },
       {
         "fold": 5,
-        "train_size": 36621,
-        "val_size": 13721,
-        "accuracy": 0.6805626412069091,
-        "log_loss": 0.5879421866892,
-        "brier": 0.20211517810821533,
-        "auc_roc": 0.7501692539574291
+        "train_size": 10361,
+        "val_size": 4791,
+        "accuracy": 0.5491546649968692,
+        "log_loss": 0.699508231009408,
+        "brier": 0.25209373235702515,
+        "auc_roc": 0.5677260680663648
       }
     ],
-    "mean_accuracy": 0.6713914793314177,
-    "mean_log_loss": 0.6007803033437605,
-    "mean_brier": 0.20721690058708192,
-    "mean_auc_roc": 0.7353463497407897
+    "mean_accuracy": 0.5687574453330497,
+    "mean_log_loss": 0.7077759138499425,
+    "mean_brier": 0.25357812345027925,
+    "mean_auc_roc": 0.5884180759786015
   },
-  "home_goals_regressor": {
+  "home_runs_regressor": {
     "folds": [
       {
         "fold": 1,
-        "train_size": 6947,
-        "val_size": 6923,
-        "rmse": 1.1556674933370519,
-        "mae": 0.9136744141578674
+        "train_size": 2388,
+        "val_size": 862,
+        "rmse": 3.183673431709884,
+        "mae": 2.456019401550293
       },
       {
         "fold": 2,
-        "train_size": 13870,
-        "val_size": 7651,
-        "rmse": 1.1659889409831445,
-        "mae": 0.8953591585159302
+        "train_size": 3250,
+        "val_size": 2366,
+        "rmse": 3.2451874240066862,
+        "mae": 2.517111301422119
       },
       {
         "fold": 3,
-        "train_size": 21521,
-        "val_size": 7523,
-        "rmse": 1.1504348720467261,
-        "mae": 0.900564432144165
+        "train_size": 5616,
+        "val_size": 2353,
+        "rmse": 3.035755387997662,
+        "mae": 2.364628314971924
       },
       {
         "fold": 4,
-        "train_size": 29044,
-        "val_size": 7577,
-        "rmse": 1.171453832601528,
-        "mae": 0.9042912721633911
+        "train_size": 7969,
+        "val_size": 2392,
+        "rmse": 3.139699163664868,
+        "mae": 2.4767167568206787
       },
       {
         "fold": 5,
-        "train_size": 36621,
-        "val_size": 13721,
-        "rmse": 1.140973390648408,
-        "mae": 0.8929026126861572
+        "train_size": 10361,
+        "val_size": 4791,
+        "rmse": 3.0884293551339055,
+        "mae": 2.406017541885376
       }
     ],
-    "mean_rmse": 1.1569037059233718,
-    "mean_mae": 0.9013583779335022
+    "mean_rmse": 3.1385489525026014,
+    "mean_mae": 2.4440986633300783
   },
-  "away_goals_regressor": {
+  "away_runs_regressor": {
     "folds": [
       {
         "fold": 1,
-        "train_size": 6947,
-        "val_size": 6923,
-        "rmse": 1.0590004227793195,
-        "mae": 0.8250411152839661
+        "train_size": 2388,
+        "val_size": 862,
+        "rmse": 3.570912784388397,
+        "mae": 2.841801881790161
       },
       {
         "fold": 2,
-        "train_size": 13870,
-        "val_size": 7651,
-        "rmse": 1.0414413526361097,
-        "mae": 0.815290629863739
+        "train_size": 3250,
+        "val_size": 2366,
+        "rmse": 3.26060516170048,
+        "mae": 2.5124993324279785
       },
       {
         "fold": 3,
-        "train_size": 21521,
-        "val_size": 7523,
-        "rmse": 1.035437261477662,
-        "mae": 0.8058456778526306
+        "train_size": 5616,
+        "val_size": 2353,
+        "rmse": 3.2014283687853875,
+        "mae": 2.486473798751831
       },
       {
         "fold": 4,
-        "train_size": 29044,
-        "val_size": 7577,
-        "rmse": 1.050661328361072,
-        "mae": 0.8206849098205566
+        "train_size": 7969,
+        "val_size": 2392,
+        "rmse": 3.262460589992977,
+        "mae": 2.527132272720337
       },
       {
         "fold": 5,
-        "train_size": 36621,
-        "val_size": 13721,
-        "rmse": 1.0345244008759245,
-        "mae": 0.809313178062439
+        "train_size": 10361,
+        "val_size": 4791,
+        "rmse": 3.2236763004488656,
+        "mae": 2.5253539085388184
       }
     ],
-    "mean_rmse": 1.0442129532260176,
-    "mean_mae": 0.8152351021766663
+    "mean_rmse": 3.3038166410632215,
+    "mean_mae": 2.5786522388458253
   },
   "feature_columns": [
     "home_roll_win_rate",
     "away_roll_win_rate",
-    "home_roll_goals_scored",
-    "away_roll_goals_scored",
-    "home_roll_goals_allowed",
-    "away_roll_goals_allowed",
-    "home_roll_goal_diff",
-    "away_roll_goal_diff",
+    "home_roll_rs",
+    "away_roll_rs",
+    "home_roll_ra",
+    "away_roll_ra",
+    "home_roll_run_diff",
+    "away_roll_run_diff",
     "home_roll_pythag",
     "away_roll_pythag",
+    "home_roll7_win_rate",
+    "away_roll7_win_rate",
+    "home_roll7_rs",
+    "away_roll7_rs",
+    "home_roll7_ra",
+    "away_roll7_ra",
+    "home_roll30_win_rate",
+    "away_roll30_win_rate",
+    "home_roll30_rs",
+    "away_roll30_rs",
+    "home_roll30_ra",
+    "away_roll30_ra",
     "home_season_win_pct",
     "away_season_win_pct",
-    "home_attack_strength",
-    "away_attack_strength",
-    "home_defense_strength",
-    "away_defense_strength",
+    "home_rest_days",
+    "away_rest_days",
+    "h2h_home_win_rate",
+    "home_wrc_plus",
+    "away_wrc_plus",
+    "home_obp",
+    "away_obp",
+    "home_slg",
+    "away_slg",
+    "home_k_pct",
+    "away_k_pct",
+    "home_bb_pct",
+    "away_bb_pct",
+    "home_era",
+    "away_era",
+    "home_fip",
+    "away_fip",
+    "home_xfip",
+    "away_xfip",
+    "home_k9",
+    "away_k9",
+    "home_bb9",
+    "away_bb9",
+    "home_bullpen_era",
+    "away_bullpen_era",
+    "home_pitcher_era",
+    "away_pitcher_era",
+    "home_park_factor",
+    "temp_f",
+    "wind_mph",
+    "is_dome",
     "roll_win_rate_diff",
-    "roll_goal_diff_diff",
+    "roll_run_diff_diff",
     "roll_pythag_diff",
+    "roll7_win_rate_diff",
+    "roll30_win_rate_diff",
     "season_win_pct_diff",
-    "attack_diff",
-    "defense_diff",
+    "wrc_plus_diff",
+    "era_diff",
+    "fip_diff",
+    "rest_days_diff",
     "month",
     "day_of_week",
     "is_weekend",
+    "is_2020",
     "home_advantage"
   ]
 }
