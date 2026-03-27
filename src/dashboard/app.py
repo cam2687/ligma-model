@@ -384,12 +384,21 @@ def render_sidebar() -> tuple[str, dict]:
         st.subheader("Model Performance (CV)")
         if "win_classifier" in cv_metrics:
             wc = cv_metrics["win_classifier"]
-            st.metric("Win Accuracy",  f"{wc.get('mean_accuracy', 0):.1%}")
-            st.metric("ROC-AUC",       f"{wc.get('mean_auc_roc', 0):.3f}")
-            st.metric("Brier Score",   f"{wc.get('mean_brier', 0):.4f}")
-            if "mean_macro_f1" in wc:
-                st.metric("Macro-F1", f"{wc.get('mean_macro_f1', 0):.3f}")
-            st.caption("Lower Brier = better calibration. Naive guess = 0.25")
+            if sport == "soccer":
+                st.metric("1X2 Accuracy", f"{wc.get('mean_accuracy', 0):.1%}")
+                st.metric("ROC-AUC (OvR)", f"{wc.get('mean_auc_roc', 0):.3f}")
+                st.metric("Brier Score", f"{wc.get('mean_brier', 0):.4f}")
+                if "mean_macro_f1" in wc:
+                    st.metric("Macro-F1", f"{wc.get('mean_macro_f1', 0):.3f}")
+                st.caption(
+                    "Soccer is a 3-way outcome model (home/draw/away). "
+                    "Accuracy and Macro-F1 matter more than the old binary baseline."
+                )
+            else:
+                st.metric("Win Accuracy", f"{wc.get('mean_accuracy', 0):.1%}")
+                st.metric("ROC-AUC", f"{wc.get('mean_auc_roc', 0):.3f}")
+                st.metric("Brier Score", f"{wc.get('mean_brier', 0):.4f}")
+                st.caption("Lower Brier = better calibration. Naive guess = 0.25")
 
         if "home_runs_regressor" in cv_metrics and "away_runs_regressor" in cv_metrics:
             hr = cv_metrics["home_runs_regressor"]
@@ -408,6 +417,7 @@ def render_sidebar() -> tuple[str, dict]:
         **How to read this:**
         - Soccer uses 1X2 probabilities: home, draw, away
         - Win % = model's probability for each outcome
+        - Soccer CV is stricter now: no same-season leakage and draws are modeled explicitly
         - Fair Moneyline = no-vig implied odds
         - Confidence: based on the top predicted outcome probability
         - Rolling form based on last 15 games
