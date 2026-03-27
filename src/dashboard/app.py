@@ -83,24 +83,56 @@ def load_predictions(sport: str) -> list[dict]:
     return []
 
 
-def refresh_prediction_file(sport: str) -> tuple[bool, str]:
-    """Regenerate one sport's prediction file via the CLI."""
+def _run_sport_command(sport: str, command: str, timeout_s: int) -> tuple[bool, str]:
+    """Run a CLI subcommand for one sport using SPORT_OVERRIDE."""
+    project_root = Path(__file__).parents[2]
+    env = dict(os.environ)
+    env["SPORT_OVERRIDE"] = sport
     try:
-        project_root = Path(__file__).parents[2]
-        env = dict(os.environ)
-        env["SPORT_OVERRIDE"] = sport
         result = subprocess.run(
-            [sys.executable, "main.py", "predict"],
+            [sys.executable, "main.py", command],
             cwd=project_root,
             capture_output=True,
             text=True,
             check=False,
             env=env,
+            timeout=timeout_s,
         )
-        if result.returncode != 0:
-            stderr = (result.stderr or "").strip().splitlines()
-            return False, stderr[-1] if stderr else "Prediction refresh failed."
-        return True, f"Predictions refreshed for {sport}."
+    except subprocess.TimeoutExpired:
+        return False, f"`python main.py {command}` timed out for {sport}."
+    except Exception as exc:
+        return False, str(exc)
+
+    if result.returncode == 0:
+        return True, (result.stdout or "").strip()
+
+    combined = "\n".join(
+        part.strip() for part in [result.stdout or "", result.stderr or ""] if part.strip()
+    )
+    return False, combined or f"`python main.py {command}` failed for {sport}."
+
+
+def refresh_prediction_file(sport: str) -> tuple[bool, str]:
+    """Regenerate one sport's prediction file via the CLI."""
+    try:
+        ok, output = _run_sport_command(sport, "predict", timeout_s=120)
+        if ok:
+            return True, f"Predictions refreshed for {sport}."
+
+        if "Model not found at" in output:
+            ok, train_output = _run_sport_command(sport, "train", timeout_s=900)
+            if not ok:
+                last_line = train_output.strip().splitlines()[-1] if train_output.strip() else "Training failed."
+                return False, f"{sport.title()} model training failed: {last_line}"
+
+            ok, predict_output = _run_sport_command(sport, "predict", timeout_s=120)
+            if ok:
+                return True, f"{sport.title()} model trained and predictions refreshed."
+            last_line = predict_output.strip().splitlines()[-1] if predict_output.strip() else "Prediction failed."
+            return False, f"{sport.title()} prediction failed after training: {last_line}"
+
+        last_line = output.strip().splitlines()[-1] if output.strip() else "Prediction refresh failed."
+        return False, last_line
     except Exception as exc:
         return False, str(exc)
 
@@ -337,7 +369,8 @@ def render_sidebar() -> tuple[str, dict]:
         st.divider()
 
         if st.button("🔄 Refresh Predictions", use_container_width=True):
-            ok, msg = refresh_prediction_file(sport)
+            with st.spinner(f"Refreshing {sport} predictions..."):
+                ok, msg = refresh_prediction_file(sport)
             st.cache_data.clear()
             if ok:
                 st.success(msg)
@@ -415,7 +448,7 @@ def main() -> None:
                 st.code("python main.py predict")
         else:
             st.subheader(f"{len(predictions)} Games Today")
-            for game in predictions:
+            for game in sorted(predictions, key=lambda g: g.get("game_datetime", "")):
                 render_game_card(game)
 
     with tab_model:
