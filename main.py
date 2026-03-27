@@ -20,7 +20,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Ensure project root is importable
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import CACHE_DIR, MODELS_DIR, TRAIN_SEASONS
@@ -43,6 +42,17 @@ def cmd_fetch(args) -> None:
         print("[fetch] Fetching FanGraphs batting + pitching stats...")
         batting, pitching = fetch_all_fangraphs(seasons=seasons, force=args.force)
         print(f"[fetch] Batting seasons: {sorted(batting)}, Pitching seasons: {sorted(pitching)}")
+
+        print("[fetch] Fetching bullpen ERA (FanGraphs individual pitching)...")
+        from src.data.fetch import fetch_all_bullpen_stats
+        bullpen = fetch_all_bullpen_stats(seasons=seasons, force=args.force)
+        print(f"[fetch] Bullpen seasons: {sorted(bullpen)}")
+
+        print("[fetch] Fetching historical weather for all stadiums (Open-Meteo)...")
+        from src.data.fetch import fetch_weather_all_teams
+        fetch_weather_all_teams(seasons=seasons, force=args.force)
+        print("[fetch] Weather data cached.")
+
     elif SPORT == "soccer":
         print("[fetch] Computing soccer team stats...")
         team_stats = {}
@@ -51,6 +61,7 @@ def cmd_fetch(args) -> None:
             if not stats.empty:
                 team_stats[season] = stats
         print(f"[fetch] Team stats seasons: {sorted(team_stats)}")
+
     print("[fetch] Done.")
 
 
@@ -69,9 +80,21 @@ def cmd_engineer(args) -> None:
     print("[engineer] Loading game logs...")
     game_logs = fetch_all_game_logs(seasons=seasons, force=args.force)
 
+    bullpen_by_season = {}
+    weather_df = None
+
     if SPORT == "mlb":
         print("[engineer] Loading FanGraphs stats...")
         batting, pitching = fetch_all_fangraphs(seasons=seasons)
+
+        print("[engineer] Loading bullpen stats...")
+        from src.data.fetch import fetch_all_bullpen_stats
+        bullpen_by_season = fetch_all_bullpen_stats(seasons=seasons)
+
+        print("[engineer] Loading historical weather...")
+        from src.data.fetch import fetch_weather_all_teams
+        weather_df = fetch_weather_all_teams(seasons=seasons)
+
     elif SPORT == "soccer":
         print("[engineer] Loading soccer team stats...")
         team_stats = {}
@@ -79,11 +102,14 @@ def cmd_engineer(args) -> None:
             stats = fetch_team_batting_stats(season, force=args.force)
             if not stats.empty:
                 team_stats[season] = stats
-        batting, pitching = team_stats, {}  # batting contains team stats for soccer
+        batting, pitching = team_stats, {}
 
     print("[engineer] Building feature matrix...")
     df = build_training_dataset(
-        game_logs, batting, pitching, save_path=features_path
+        game_logs, batting, pitching,
+        bullpen_by_season=bullpen_by_season,
+        weather_df=weather_df,
+        save_path=features_path,
     )
     print(f"[engineer] Feature matrix: {df.shape}  ->  {features_path}")
 
@@ -123,8 +149,6 @@ def cmd_train(args) -> None:
         print(f"  Win Classifier  -- Accuracy: {wc['mean_accuracy']:.3f}  AUC: {wc['mean_auc_roc']:.3f}  Brier: {wc['mean_brier']:.4f}")
         print(f"  Home Goals Reg  -- RMSE:     {hr['mean_rmse']:.3f}  MAE:  {hr['mean_mae']:.3f}")
         print(f"  Away Goals Reg  -- RMSE:     {ar['mean_rmse']:.3f}  MAE:  {ar['mean_mae']:.3f}")
-    else:
-        raise ValueError(f"Unsupported sport: {SPORT}")
 
     # Save feature importance
     try:
@@ -149,10 +173,14 @@ def cmd_predict(args) -> None:
     print("[predict] Loading game logs for rolling features...")
     game_logs = fetch_all_game_logs(seasons=seasons)
 
+    bullpen_by_season = {}
+
     if SPORT == "mlb":
-        from src.data.fetch import fetch_all_fangraphs
+        from src.data.fetch import fetch_all_fangraphs, fetch_all_bullpen_stats
         print("[predict] Loading FanGraphs stats...")
         batting, pitching = fetch_all_fangraphs(seasons=seasons)
+        print("[predict] Loading bullpen stats...")
+        bullpen_by_season = fetch_all_bullpen_stats(seasons=seasons)
     elif SPORT == "soccer":
         from src.data.fetch import fetch_team_batting_stats
         print("[predict] Loading soccer team stats...")
@@ -164,7 +192,8 @@ def cmd_predict(args) -> None:
         pitching = {}
 
     print("[predict] Generating predictions...")
-    results = predict_today(game_logs, batting, pitching)
+    results = predict_today(game_logs, batting, pitching,
+                            bullpen_by_season=bullpen_by_season)
 
     if not results:
         print("[predict] No games found for today. Season may not have started yet.")
@@ -174,7 +203,14 @@ def cmd_predict(args) -> None:
     # Pretty-print to console
     print(f"\n[predict] === Today's Games ({len(results)}) ===\n")
     for g in results:
-        winner_br = g["home_team_br"] if g["predicted_winner"] == "home" else g["away_team_br"]
+        rest_info = (
+            f" | Rest: {g.get('home_team_br','?')} {g.get('home_rest_days',4):.0f}d / "
+            f"{g.get('away_team_br','?')} {g.get('away_rest_days',4):.0f}d"
+        ) if SPORT == "mlb" else ""
+        weather_info = (
+            f" | {g.get('temp_f', 70):.0f}°F {g.get('wind_mph', 7):.0f}mph"
+        ) if SPORT == "mlb" and not g.get("is_dome") else ""
+
         print(
             f"  {g['away_team_br']} @ {g['home_team_br']}  |  "
             f"Win: {g['home_team_br']} {g['home_win_prob']:.1%} / "
@@ -183,11 +219,12 @@ def cmd_predict(args) -> None:
             f"ML: {g['home_team_br']} {g['home_moneyline_str']} / "
             f"{g['away_team_br']} {g['away_moneyline_str']}  |  "
             f"Conf: {g['confidence']}"
+            f"{rest_info}{weather_info}"
         )
 
-    # Save for dashboard (sport-specific file)
-    from config import SPORT
-    pred_path = CACHE_DIR / f"{SPORT}_predictions.json"
+    # Save for dashboard
+    from config import SPORT as CURRENT_SPORT
+    pred_path = CACHE_DIR / f"{CURRENT_SPORT}_predictions.json"
     with open(pred_path, "w") as f:
         json.dump(results, f, indent=2, default=str)
     print(f"\n[predict] Saved to {pred_path}")

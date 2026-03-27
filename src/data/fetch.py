@@ -375,6 +375,9 @@ def _games_to_team_rows(games: pd.DataFrame) -> pd.DataFrame:
     else:
         raise ValueError(f"Unsupported sport: {SPORT}")
 
+    if "league" not in games.columns:
+        games = games.assign(league="default")
+
     home_rows = games.rename(columns={
         "home_team_br": "team_br",
         "away_team_br": "opponent_br",
@@ -400,7 +403,7 @@ def _games_to_team_rows(games: pd.DataFrame) -> pd.DataFrame:
     )
 
     return combined[[
-        "date", "season", "team_br", "opponent_br", "home_flag",
+        "date", "season", "league", "team_br", "opponent_br", "home_flag",
         "win", score_col, allow_col, "game_number", "is_doubleheader",
     ]].sort_values(["team_br", "season", "date"]).reset_index(drop=True)
 
@@ -521,6 +524,211 @@ def fetch_all_fangraphs(seasons: list[int] = TRAIN_SEASONS,
         if not pit.empty:
             pitching[season] = pit
     return batting, pitching
+
+
+# ---------------------------------------------------------------------------
+# Bullpen ERA (MLB only) — individual pitcher stats from FanGraphs via pybaseball
+# ---------------------------------------------------------------------------
+
+def fetch_bullpen_stats(season: int, force: bool = False) -> pd.DataFrame:
+    """
+    Fetch reliever-only ERA aggregated by team for a given season.
+    Relievers = pitchers where GS < G * 0.4 (started <40% of appearances).
+    Returns DataFrame with columns: team_br, season, bullpen_era.
+    """
+    key = f"bullpen_stats_{season}"
+    if not force:
+        cached = _load(key)
+        if cached is not None:
+            return cached
+
+    try:
+        df = pybaseball.pitching_stats(season, season, qual=1)
+    except Exception as exc:
+        print(f"  [fetch] WARN: bullpen stats {season}: {exc}")
+        return pd.DataFrame()
+
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    # Filter to relievers: started fewer than 40% of appearances
+    if "GS" in df.columns and "G" in df.columns:
+        df = df[df["GS"] < df["G"] * 0.4].copy()
+    else:
+        return pd.DataFrame()
+
+    # Identify team and ERA columns (FanGraphs may use "Team" or "team")
+    team_col = next((c for c in df.columns if c.lower() == "team"), None)
+    era_col  = next((c for c in df.columns if c.upper() == "ERA"), None)
+    ip_col   = next((c for c in df.columns if c.upper() == "IP"), None)
+    fip_col  = next((c for c in df.columns if c.upper() == "FIP"), None)
+
+    if team_col is None or era_col is None or ip_col is None:
+        return pd.DataFrame()
+
+    df = df[[team_col, era_col, ip_col] + ([fip_col] if fip_col else [])].copy()
+    df.columns = ["team", "bullpen_era", "ip"] + (["bullpen_fip"] if fip_col else [])
+
+    df["ip"]          = pd.to_numeric(df["ip"],          errors="coerce").fillna(0)
+    df["bullpen_era"] = pd.to_numeric(df["bullpen_era"], errors="coerce")
+    df = df.dropna(subset=["bullpen_era"])
+    df = df[df["ip"] > 0]
+
+    # Weighted average ERA by team (IP-weighted)
+    def _wavg(grp):
+        total_ip = grp["ip"].sum()
+        if total_ip == 0:
+            return pd.Series({"bullpen_era": 4.50})
+        era_w = (grp["bullpen_era"] * grp["ip"]).sum() / total_ip
+        return pd.Series({"bullpen_era": round(float(era_w), 2)})
+
+    result = df.groupby("team").apply(_wavg).reset_index()
+    result["team_br"] = result["team"].map(
+        lambda t: FG_TO_BR.get(str(t).upper(), str(t).upper())
+    )
+    result["season"] = season
+
+    out = result[["team_br", "season", "bullpen_era"]]
+    _save(key, out)
+    return out
+
+
+def fetch_all_bullpen_stats(seasons: list[int] = TRAIN_SEASONS,
+                            force: bool = False) -> dict[int, pd.DataFrame]:
+    """Fetch bullpen ERA for all seasons. Returns {season: DataFrame}."""
+    result = {}
+    for season in seasons:
+        df = fetch_bullpen_stats(season, force=force)
+        if not df.empty:
+            result[season] = df
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Weather (MLB only) — Open-Meteo free API, no key required
+# ---------------------------------------------------------------------------
+
+def fetch_weather_all_teams(seasons: list[int] = TRAIN_SEASONS,
+                            force: bool = False) -> pd.DataFrame:
+    """
+    Fetch historical daily weather for every MLB stadium using Open-Meteo.
+    One API call per non-dome team covering the full training date range.
+    Returns DataFrame: date, team_br, temp_f, wind_mph, is_dome.
+    Dome teams are filled with controlled-environment defaults (72°F, 0 mph).
+    """
+    from config import STADIUM_COORDS, DOME_STADIUMS, MLB_TEAMS_BR
+
+    key = f"weather_historical_{'_'.join(map(str, seasons))}"
+    if not force:
+        cached = _load(key)
+        if cached is not None:
+            return cached
+
+    start_date = f"{min(seasons)}-03-01"
+    end_date   = f"{max(seasons)}-10-31"
+
+    all_dfs = []
+
+    # Dome teams: static comfortable-conditions defaults
+    dome_rows = []
+    for d in pd.date_range(start_date, end_date, freq="D"):
+        for team_br in DOME_STADIUMS:
+            dome_rows.append({
+                "date":     d,
+                "team_br":  team_br,
+                "temp_f":   72.0,
+                "wind_mph": 0.0,
+                "is_dome":  1,
+            })
+    if dome_rows:
+        all_dfs.append(pd.DataFrame(dome_rows))
+
+    # Outdoor stadiums: fetch from Open-Meteo historical archive
+    outdoor_teams = [t for t in MLB_TEAMS_BR if t not in DOME_STADIUMS]
+    for team_br in outdoor_teams:
+        lat, lon = STADIUM_COORDS.get(team_br, (39.0, -95.0))
+        url = (
+            f"https://archive-api.open-meteo.com/v1/archive"
+            f"?latitude={lat}&longitude={lon}"
+            f"&start_date={start_date}&end_date={end_date}"
+            f"&daily=temperature_2m_max,windspeed_10m_max"
+            f"&timezone=America%2FNew_York"
+        )
+        try:
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            dates = data["daily"]["time"]
+            temps = data["daily"].get("temperature_2m_max", [])
+            winds = data["daily"].get("windspeed_10m_max", [])
+
+            rows = []
+            for i, d in enumerate(dates):
+                temp_c   = temps[i] if i < len(temps) and temps[i] is not None else 20.0
+                wind_kmh = winds[i] if i < len(winds) and winds[i] is not None else 10.0
+                rows.append({
+                    "date":     pd.to_datetime(d),
+                    "team_br":  team_br,
+                    "temp_f":   round(temp_c * 9 / 5 + 32, 1),
+                    "wind_mph": round(wind_kmh * 0.621371, 1),
+                    "is_dome":  0,
+                })
+            all_dfs.append(pd.DataFrame(rows))
+            time.sleep(0.4)  # respect Open-Meteo rate limits
+        except Exception as exc:
+            print(f"  [fetch] WARN: weather for {team_br}: {exc}")
+
+    if not all_dfs:
+        return pd.DataFrame()
+
+    weather_df = pd.concat(all_dfs, ignore_index=True)
+    weather_df["date"] = pd.to_datetime(weather_df["date"])
+    _save(key, weather_df)
+    print(f"  [fetch] Weather: {len(weather_df):,} daily rows for {len(MLB_TEAMS_BR)} stadiums")
+    return weather_df
+
+
+def fetch_weather_forecast(team_br: str, date_str: str) -> dict:
+    """
+    Fetch weather forecast for a specific stadium on a specific date.
+    Uses Open-Meteo forecast API (free, no key required).
+    Returns dict: {temp_f, wind_mph, is_dome}.
+    """
+    from config import STADIUM_COORDS, DOME_STADIUMS
+
+    if team_br in DOME_STADIUMS:
+        return {"temp_f": 72.0, "wind_mph": 0.0, "is_dome": 1}
+
+    lat, lon = STADIUM_COORDS.get(team_br, (39.0, -95.0))
+    url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        f"&daily=temperature_2m_max,windspeed_10m_max"
+        f"&forecast_days=7"
+        f"&timezone=auto"
+    )
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        dates = data["daily"]["time"]
+        temps = data["daily"].get("temperature_2m_max", [])
+        winds = data["daily"].get("windspeed_10m_max", [])
+
+        target = date_str[:10]
+        for i, d in enumerate(dates):
+            if d == target:
+                temp_c   = temps[i] if i < len(temps) and temps[i] is not None else 20.0
+                wind_kmh = winds[i] if i < len(winds) and winds[i] is not None else 10.0
+                return {
+                    "temp_f":   round(temp_c * 9 / 5 + 32, 1),
+                    "wind_mph": round(wind_kmh * 0.621371, 1),
+                    "is_dome":  0,
+                }
+    except Exception as exc:
+        print(f"  [fetch] WARN: weather forecast for {team_br} on {date_str}: {exc}")
+
+    return {"temp_f": 70.0, "wind_mph": 7.0, "is_dome": 0}
 
 
 def _compute_soccer_team_stats(season: int, force: bool = False) -> pd.DataFrame:

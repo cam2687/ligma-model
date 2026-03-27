@@ -94,8 +94,9 @@ def load_feature_importance() -> pd.DataFrame:
 
 def win_prob_bar(home_team: str, away_team: str,
                  home_prob: float, away_prob: float,
-                 predicted_winner: str) -> go.Figure:
-    """Horizontal bar chart showing win probabilities."""
+                 predicted_winner: str,
+                 draw_prob: float | None = None) -> go.Figure:
+    """Horizontal bar chart showing outcome probabilities."""
     home_pct = home_prob * 100
     away_pct = away_prob * 100
 
@@ -119,6 +120,17 @@ def win_prob_bar(home_team: str, away_team: str,
         textposition="outside",
         name=away_team,
     ))
+    if draw_prob is not None:
+        draw_pct = draw_prob * 100
+        draw_color = "#2ecc71" if predicted_winner == "draw" else "#95a5a6"
+        fig.add_trace(go.Bar(
+            x=[draw_pct], y=["Draw"],
+            orientation="h",
+            marker_color=draw_color,
+            text=[f"{draw_pct:.1f}%"],
+            textposition="outside",
+            name="Draw",
+        ))
     fig.update_layout(
         xaxis=dict(range=[0, 115], showticklabels=False, showgrid=False),
         yaxis=dict(autorange="reversed"),
@@ -145,6 +157,8 @@ def render_form_string(form: str) -> str:
             parts.append(f'<span style="color:#2ecc71;font-weight:bold">W</span>')
         elif ch == "L":
             parts.append(f'<span style="color:#e74c3c">L</span>')
+        elif ch == "D":
+            parts.append(f'<span style="color:#f39c12;font-weight:bold">D</span>')
         else:
             parts.append(ch)
     return " ".join(parts)
@@ -158,8 +172,12 @@ def render_game_card(game: dict) -> None:
     a_br = game.get("away_team_br", "")
     winner = game["predicted_winner"]
 
-    h_class = "winner-highlight" if winner == "home" else "loser-dim"
-    a_class = "winner-highlight" if winner == "away" else "loser-dim"
+    if winner == "draw":
+        h_class = "winner-highlight"
+        a_class = "winner-highlight"
+    else:
+        h_class = "winner-highlight" if winner == "home" else "loser-dim"
+        a_class = "winner-highlight" if winner == "away" else "loser-dim"
 
     h_ml = game["home_moneyline_str"]
     a_ml = game["away_moneyline_str"]
@@ -190,6 +208,7 @@ def render_game_card(game: dict) -> None:
             fig = win_prob_bar(
                 f"{h_br} (Home)", f"{a_br} (Away)",
                 game["home_win_prob"], game["away_win_prob"], winner,
+                draw_prob=game.get("draw_prob"),
             )
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
@@ -217,12 +236,14 @@ def render_game_card(game: dict) -> None:
 
         with col_ml:
             st.markdown("**Fair Moneyline**")
-            st.markdown(
-                f"{h_br}: <span class='{h_ml_class}'>{h_ml}</span><br>"
-                f"{a_br}: <span class='{a_ml_class}'>{a_ml}</span><br>"
-                f"<small style='color:#888'>Model implied (no vig)</small>",
-                unsafe_allow_html=True,
-            )
+            lines = [
+                f"{h_br}: <span class='{h_ml_class}'>{h_ml}</span>",
+            ]
+            if "draw_moneyline_str" in game:
+                lines.append(f"Draw: <span class='moneyline-dog'>{game['draw_moneyline_str']}</span>")
+            lines.append(f"{a_br}: <span class='{a_ml_class}'>{a_ml}</span>")
+            lines.append("<small style='color:#888'>Model implied (no vig)</small>")
+            st.markdown("<br>".join(lines), unsafe_allow_html=True)
 
         with col_form:
             st.markdown("**Recent Form (last 10)**")
@@ -279,6 +300,8 @@ def render_sidebar(cv_metrics: dict) -> str:
             st.metric("Win Accuracy",  f"{wc.get('mean_accuracy', 0):.1%}")
             st.metric("ROC-AUC",       f"{wc.get('mean_auc_roc', 0):.3f}")
             st.metric("Brier Score",   f"{wc.get('mean_brier', 0):.4f}")
+            if "mean_macro_f1" in wc:
+                st.metric("Macro-F1", f"{wc.get('mean_macro_f1', 0):.3f}")
             st.caption("Lower Brier = better calibration. Naive guess = 0.25")
 
         if "home_runs_regressor" in cv_metrics and "away_runs_regressor" in cv_metrics:
@@ -296,9 +319,10 @@ def render_sidebar(cv_metrics: dict) -> str:
 
         st.markdown("""
         **How to read this:**
-        - Win % = model's probability for each team
+        - Soccer uses 1X2 probabilities: home, draw, away
+        - Win % = model's probability for each outcome
         - Fair Moneyline = no-vig implied odds
-        - Confidence: how far prob is from 50%
+        - Confidence: based on the top predicted outcome probability
         - Rolling form based on last 15 games
         """)
 
