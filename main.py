@@ -201,6 +201,17 @@ def cmd_predict(args) -> None:
         return
 
     # Pretty-print to console
+    from datetime import datetime, timezone, timedelta
+
+    def _fmt_et(dt_str: str) -> str:
+        try:
+            dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+            dt_et = dt.astimezone(timezone(timedelta(hours=-4)))
+            h = dt_et.hour % 12 or 12
+            return f"{h}:{dt_et.strftime('%M %p')} ET"
+        except Exception:
+            return ""
+
     print(f"\n[predict] === Today's Games ({len(results)}) ===\n")
     for g in results:
         rest_info = (
@@ -211,8 +222,10 @@ def cmd_predict(args) -> None:
             f" | {g.get('temp_f', 70):.0f}°F {g.get('wind_mph', 7):.0f}mph"
         ) if SPORT == "mlb" and not g.get("is_dome") else ""
 
+        time_et = _fmt_et(g.get("game_datetime", ""))
         print(
             f"  {g['away_team_br']} @ {g['home_team_br']}  |  "
+            f"{time_et}  |  "
             f"Win: {g['home_team_br']} {g['home_win_prob']:.1%} / "
             f"{g['away_team_br']} {g['away_win_prob']:.1%}  |  "
             f"Total: {g['predicted_total']}  |  "

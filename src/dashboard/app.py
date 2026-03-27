@@ -11,7 +11,7 @@ import sys
 import json
 import subprocess
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 
 import pandas as pd
 import numpy as np
@@ -20,7 +20,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
-from config import MODELS_DIR, CACHE_DIR, BR_TO_FULL_NAME
+from config import MODELS_DIR, CACHE_DIR, BR_TO_FULL_NAME, SPORT as CONFIGURED_SPORT
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ def refresh_prediction_file() -> tuple[bool, str]:
         if result.returncode != 0:
             stderr = (result.stderr or "").strip().splitlines()
             return False, stderr[-1] if stderr else "Prediction refresh failed."
-        return True, "Predictions refreshed."
+        return True, f"Predictions refreshed for configured backend sport: {CONFIGURED_SPORT}."
     except Exception as exc:
         return False, str(exc)
 
@@ -194,6 +194,20 @@ def render_form_string(form: str) -> str:
     return " ".join(parts)
 
 
+def _utc_to_et(dt_str: str) -> str:
+    """Convert a UTC ISO datetime string to 12-hour ET time string, e.g. '4:35 PM ET'."""
+    if not dt_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+        # EDT = UTC-4 covers the entire MLB regular season (April-October)
+        dt_et = dt.astimezone(timezone(timedelta(hours=-4)))
+        hour = dt_et.hour % 12 or 12
+        return f"{hour}:{dt_et.strftime('%M %p')} ET"
+    except Exception:
+        return dt_str[:16].replace("T", " ")
+
+
 def render_game_card(game: dict) -> None:
     """Render a single game prediction card."""
     h = game["home_team_name"]
@@ -215,7 +229,7 @@ def render_game_card(game: dict) -> None:
     a_ml_class = "moneyline-fav" if game["away_moneyline"] < 0 else "moneyline-dog"
 
     venue = game.get("venue", "")
-    dt    = game.get("game_datetime", "")[:16].replace("T", " ") if game.get("game_datetime") else ""
+    dt    = _utc_to_et(game.get("game_datetime", ""))
 
     with st.container():
         # Header row
@@ -380,6 +394,17 @@ def main() -> None:
 
     predictions = load_predictions(sport)
     feat_imp    = load_feature_importance()
+
+    if sport != CONFIGURED_SPORT:
+        st.warning(
+            f"The dashboard is showing `{sport}` but the backend is currently configured for "
+            f"`{CONFIGURED_SPORT}` in config.py. The refresh button only regenerates "
+            f"`{CONFIGURED_SPORT}` predictions."
+        )
+        st.info(
+            f"To get fresh {sport} predictions, set `SPORT = \"{sport}\"` in `config.py` and run "
+            f"`python main.py predict`."
+        )
 
     # ---- Games tab ----
     tab_games, tab_model, tab_importance = st.tabs([
